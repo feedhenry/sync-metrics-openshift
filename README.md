@@ -1,1 +1,0 @@
-# sync-metrics-openshift
