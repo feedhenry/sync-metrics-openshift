@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Template
+metadata:
+  creationTimestamp: null
+  name: influxdb
+parameters:
+- name: STORAGE_SIZE
+  value: 10Gi
+  description: The size of the persistent storage for Influxdb
+objects:
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: influxdb-data
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: ${STORAGE_SIZE}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: null
+    labels:
+      metrics: influxdb
+    name: influxdb-svc
+  spec:
+    ports:
+    - name: api-http
+      port: 8086
+      protocol: TCP
+      targetPort: 8086
+    - name: api-udp
+      port: 8087
+      protocol: UDP
+      targetPort: 8087
+    - name: admin-http
+      port: 8083
+      protocol: TCP
+      targetPort: 8083
+    selector:
+      metrics: influxdb
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    creationTimestamp: null
+    labels:
+      metrics: influxdb
+    name: influxdb
+  spec:
+    replicas: 1
+    selector:
+      metrics: influxdb
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          metrics: influxdb
+      spec:
+        containers:
+        - env:
+          - name: INFLUXDB_UDP_ENABLED
+            value: "true"
+          - name: INFLUXDB_UDP_BIND_ADDRESS
+            value: :8087
+          - name: INFLUXDB_UDP_DATABASE
+            value: udp
+          image: influxdb
+          imagePullPolicy: Always
+          name: influxdb
+          ports:
+          - containerPort: 8086
+            protocol: TCP
+          - containerPort: 8087
+            protocol: UDP
+          - containerPort: 8083
+            protocol: TCP
+          volumeMounts:
+          - mountPath: /var/lib/influxdb
+            name: influxdb-data
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        volumes:
+        - name: influxdb-data
+          persistentVolumeClaim:
+            claimName: influxdb-data
+    test: false
+    triggers:
+    - type: ConfigChange
+  status: {}

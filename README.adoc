@@ -1,0 +1,78 @@
+= Visualize Sync Metrics Data on Openshift
+
+== Overview
+
+This guide will go through the steps to help you setup Influxdb and Grafana on Openshift to receive metrics data from the RHMAP sync framework, and view them in a Grafana dashboard.
+
+== Prerequisites
+
+You should have an Openshift cluster running somewhere. Since this guide will use persistent volumes to persist data, please make sure there are some of them available on the cluster. An link:pvs-example.yaml[example] file is provided in this repo to help with that.
+
+You should also have the https://docs.openshift.org/latest/cli_reference/get_started_cli.html[Openshift command line tool (oc)] installed locally and target to the given Openshift cluster.
+
+You should also add the cluster as an environment on RHMAP and can deploy a cloud app to the cluster.
+
+== Step 1. Create the InfluxDB service
+
+. Create a new Openshift project. You can give whatever name you like. For example, let's call it `sync-metrics`:
+
+  ....
+  oc new-project sync-metrics
+  ....
+
+. Find out what size of persistent volumes are available and choose one for Influxdb. Then you can create the Influxb service with the link:influxdb-template.yaml[influxdb template] like this: 
+
+  ....
+  export INFLUXDB_STORAGE=10Gi
+  oc new-app -p STORAGE_SIZE="$INFLUXDB_STORAGE" -f ./influxdb-template.yaml
+  ....
+
+. Wait for the Influx db service to be created and running.
+
+== Step 2. Create the Grafana service
+
+. Choose another persistent volume for Grafana, and also pick a URL for the Grafana route. Then you can create the Grafana service with the link:grafana-template.yaml[grafana template] like this:
+
+  ....
+  export HOST_URL=perf.example.openshift.com
+  export GRAFANA_STORAGE=5Gi
+  oc new-app -p STORAGE_SIZE="$GRAFANA_STORAGE" -p HOST_URL="$HOST_URL" -f grafana-template.yaml
+  ....
+
+. Wait for the Grafana service to be created and running. Once it's running, you should be able to access the Grafana console via the `HOST_URL` value.
+
+== Step 3. Add the Influxdb data source to Grafana and create the sync dashboard
+
+. Login to the Grafana console with the default admin user (u: admin, p: admin)
+. Click on the dropdown on the top left corner, and select `Data Sources` -> `Add data source`
+.. Give it a name `influxdb` and mark it as the `default` data source.
+.. Set the type to be `InfluxDB`
+.. Set the URL to be `http://influxdb-svc:8086` and Database to be `udp`
+.. No authentication is required. Save the settings.
+. Click on the dropdown again, select `Dashboard` -> `Import`, and choose the link:./dashboards/sync-stats.json[sync-stats.json] file in this repo.
+.. Give it a name, make sure choose the `influxdb` data source that is just created.
+. The dashboard should be created, but there is no data yet.
+
+== Step 4. Update the sync config of the app to send the metrics to the InfluxDB
+
+. Pass the following value to `sync.setConfig` function. For more details about the host value of the InfluxDB, see https://docs.openshift.com/enterprise/3.0/architecture/additional_concepts/networking.html[Openshift Networking Guide].
+
+  ....
+  var syncConfig = { 
+    metricsInfluxdbHost: "influxdb-svc.sync-metrics.svc.cluster.local",
+    metricsInfluxdbPort: 8087
+  };
+  mbaasApi.sync.setConfig(syncConfig);
+  ....
+
+. Redeploy the app, and make sure it is running on Openshift. 
+. Refresh the dashboard. Make sure select the right value for the `host` variable on the dashboard. You should start to see the metrics data in the dashboard.
+
+
+
+
+
+
+
+
+
